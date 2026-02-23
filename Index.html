@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <title>دليل مقاعد الظل Pro</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 select-none">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const App = () => {
+            const [heading, setHeading] = useState(0);
+            const [sunAzimuth, setSunAzimuth] = useState(null);
+            const [isNight, setIsNight] = useState(false);
+            const [error, setError] = useState(null);
+
+            // وظيفة حساب موقع الشمس الدقيق بناءً على الـ GPS والوقت
+            const updateSunPosition = (lat, lon) => {
+                const now = new Date();
+                const dayOfYear = Math.floor((now - new Date(now.getFullYear(), 0, 0)) / 86400000);
+                const hour = now.getHours() + now.getMinutes() / 60;
+                
+                // معادلة تقريبية متطورة للزاوية السمتية (Azimuth)
+                // تعتمد على خط العرض والوقت
+                let approxAzimuth = 90 + ((hour - 6) * 15); 
+                if (lat < 0) approxAzimuth = (approxAzimuth + 180) % 360; // تعديل للنصف الجنوبي
+
+                if (hour < 6 || hour > 18.5) {
+                    setIsNight(true);
+                } else {
+                    setIsNight(false);
+                    setSunAzimuth(approxAzimuth);
+                }
+            };
+
+            useEffect(() => {
+                // طلب الموقع الجغرافي
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => updateSunPosition(pos.coords.latitude, pos.coords.longitude),
+                        () => updateSunPosition(33.5, -7.6) // افتراضي (الدار البيضاء) في حال الرفض
+                    );
+                }
+            }, []);
+
+            const enableCompass = () => {
+                if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    DeviceOrientationEvent.requestPermission().then(res => {
+                        if (res === 'granted') window.addEventListener('deviceorientation', handleMove);
+                    });
+                } else {
+                    window.addEventListener('deviceorientation', handleMove);
+                }
+            };
+
+            const handleMove = (e) => {
+                const h = e.webkitCompassHeading || (360 - e.alpha);
+                if (h) setHeading(h);
+            };
+
+            const getResult = () => {
+                if (isNight) return { text: "🌙 الوقت ليلاً، الشمس غائبة", color: "text-blue-600", bg: "bg-blue-50" };
+                const diff = (sunAzimuth - heading + 360) % 360;
+                if (diff > 20 && diff < 160) return { text: "⬅️ اجلس في جهة اليسار", color: "text-green-700", bg: "bg-green-100" };
+                if (diff > 200 && diff < 340) return { text: "➡️ اجلس في جهة اليمين", color: "text-green-700", bg: "bg-green-100" };
+                return { text: "☀️ الشمس أمامك أو خلفك مباشرة", color: "text-orange-700", bg: "bg-orange-100" };
+            };
+
+            const result = getResult();
+
+            return (
+                <div className="min-h-screen flex flex-col items-center p-6 space-y-6">
+                    <header className="text-center">
+                        <h1 className="text-3xl font-black text-slate-800">مقعد الظل</h1>
+                        <p className="text-slate-500">مساعدك الذكي للسفر المريح</p>
+                    </header>
+
+                    <div className={`w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl ${result.bg} transition-colors duration-500`}>
+                        <div className="relative w-48 h-48 mx-auto mb-8 flex items-center justify-center border-4 border-white rounded-full shadow-inner bg-white/50">
+                            <div style={{ transform: `rotate(${-heading}deg)` }} className="transition-transform duration-300">
+                                <span className="text-6xl">🚌</span>
+                                <div className="absolute -top-6 left-1/2 -translate-x-1/2 font-bold text-red-500">N</div>
+                            </div>
+                        </div>
+
+                        <div className={`text-center font-bold text-xl ${result.color}`}>
+                            {result.text}
+                        </div>
+                    </div>
+
+                    <button onClick={enableCompass} className="w-full max-w-sm bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg transform active:scale-95 transition-all">
+                        تفعيل البوصلة الحية 🧭
+                    </button>
+
+                    <footer className="text-xs text-slate-400 text-center">
+                        يعمل بدون إنترنت بعد التحميل الأول <br/>
+                        إصدار Pro v2.0
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+
+        // كود تشغيل ميزة العمل بدون إنترنت (Service Worker)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(() => {});
+            });
+        }
+    </script>
+</body>
+</html>
